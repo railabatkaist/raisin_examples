@@ -196,7 +196,7 @@
     const $actTable = document.querySelector('#actTable tbody');
 
     // Defaults
-    const defaultUrl = /^https?:/.test(location.origin) ? (location.origin + '/state') : 'http://localhost:18080/state';
+    const defaultUrl = 'http://localhost:18080/state';
     $url.value = defaultUrl;
 
     function setStatus(kind, text) {
