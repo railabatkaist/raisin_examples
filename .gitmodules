@@ -1,0 +1,3 @@
+[submodule "raibo_http_server_example/vcpkg"]
+	path = raibo_http_server_example/vcpkg
+	url = git@github.com:microsoft/vcpkg.git

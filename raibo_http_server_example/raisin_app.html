@@ -1,0 +1,327 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Robot State Dashboard</title>
+    <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+    <style>
+        :root {
+            --bg: #0f172a;           /* slate-900 */
+            --panel: #111827;        /* gray-900 */
+            --muted: #9ca3af;        /* gray-400 */
+            --text: #e5e7eb;         /* gray-200 */
+            --accent: #60a5fa;       /* blue-400 */
+            --ok: #10b981;           /* emerald-500 */
+            --warn: #f59e0b;         /* amber-500 */
+            --err: #ef4444;          /* red-500 */
+            --border: #1f2937;       /* gray-800 */
+            --card-radius: 16px;
+            --shadow: 0 8px 30px rgba(0,0,0,0.25);
+        }
+        html, body { height: 100%; }
+        body {
+            margin: 0;
+            background: radial-gradient(1200px 600px at 75% -10%, rgba(96,165,250,0.08), transparent),
+            radial-gradient(900px 500px at 10% -10%, rgba(16,185,129,0.06), transparent),
+            var(--bg);
+            color: var(--text);
+            font: 14px/1.4 system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        header {
+            flex-shrink: 0;
+            position: sticky; top: 0; z-index: 10;
+            display: flex; align-items: center; gap: 16px; padding: 16px 20px;
+            background: linear-gradient(180deg, rgba(17,24,39,0.9), rgba(17,24,39,0.6));
+            border-bottom: 1px solid var(--border);
+            backdrop-filter: blur(8px);
+        }
+        h1 { font-size: 18px; letter-spacing: .3px; margin: 0; }
+        .pill { display: inline-flex; align-items: center; gap: 8px; background: #0b1220; border: 1px solid var(--border); padding: 8px 10px; border-radius: 999px; }
+        .status-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--warn); box-shadow: 0 0 0 2px rgba(0,0,0,0.2) inset; }
+        .status-text { color: var(--muted); }
+        .row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+        .row > * { margin: 4px 0; }
+        .input, .btn, select { color: var(--text); background: #0b1220; border: 1px solid var(--border); padding: 8px 10px; border-radius: 10px; outline: none; }
+        .btn { cursor: pointer; }
+        .btn:hover { border-color: #334155; }
+        .btn.primary { background: linear-gradient(180deg, #1f2937, #111827); border-color: #334155; }
+        .container { flex-grow: 1; padding: 18px; max-width: 1800px; margin: 0 auto; width: 100%; box-sizing: border-box; }
+        .grid {
+            display: grid; gap: 18px;
+            grid-template-columns: repeat(12, 1fr);
+            height: 100%;
+        }
+        .grid-col {
+            display: flex;
+            flex-direction: column;
+            gap: 18px;
+            min-height: 0;
+        }
+        .card {
+            background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
+            border: 1px solid var(--border);
+            border-radius: var(--card-radius);
+            box-shadow: var(--shadow);
+            padding: 14px 16px 10px;
+            display: flex;
+            flex-direction: column;
+        }
+        .card.fixed { flex-shrink: 0; }
+        .card.stretch { flex-grow: 1; min-height: 0; }
+        .card h2 { margin: 2px 0 10px; font-size: 14px; color: var(--muted); font-weight: 600; letter-spacing: .2px; }
+        .kpi { display: flex; align-items: baseline; gap: 10px; margin-bottom: 6px; }
+        .kpi .value { font-size: 28px; font-weight: 700; letter-spacing: .2px; }
+        .kpi .unit { color: var(--muted); font-size: 13px; }
+        .table-container { overflow-y: auto; }
+        .table { width: 100%; border-collapse: collapse; }
+        .table th, .table td { padding: 8px 10px; border-bottom: 1px solid var(--border); text-align: left; }
+        .table thead th { background: #0b1220; color: #a1a1aa; font-weight: 600; position: sticky; top: 0; }
+        .chart-container { flex-grow: 1; position: relative; }
+        canvas, #video-stream { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
+    </style>
+</head>
+<body>
+<header>
+    <h1>Robot State Dashboard</h1>
+    <div class="pill"><span class="status-dot" id="status-dot"></span><span class="status-text" id="status-text">disconnected</span></div>
+    <div class="row" style="margin-left:auto">
+        <input id="url" class="input" size="28" placeholder="http://localhost:18080/state" />
+        <label class="muted">Every</label>
+        <input id="interval" class="input" type="number" min="50" step="50" value="250" style="width:90px" />
+        <span class="muted">ms</span>
+        <button class="btn primary" id="start">Start</button>
+        <button class="btn" id="stop">Stop</button>
+    </div>
+</header>
+
+<div class="container">
+    <div class="grid">
+        <div class="grid-col" style="grid-column: span 6;">
+            <section class="card stretch">
+                <h2>Body Temperature</h2>
+                <div class="kpi"><div class="value" id="body-temp">–</div><div class="unit">°C</div></div>
+                <div class="chart-container"><canvas id="tempChart"></canvas></div>
+            </section>
+            <section class="card stretch">
+                <h2>Voltage</h2>
+                <div class="kpi"><div class="value" id="voltage">–</div><div class="unit">V</div></div>
+                <div class="chart-container"><canvas id="voltChart"></canvas></div>
+            </section>
+            <section class="card fixed">
+                <h2>Actuators</h2>
+                <div class="table-container" style="max-height: 150px;">
+                    <table class="table" id="actTable">
+                        <thead><tr><th>#</th><th>Effort</th><th>Temp (°C)</th></tr></thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </section>
+        </div>
+
+        <div class="grid-col" style="grid-column: span 6;">
+            <section class="card stretch">
+                <h2>Live Video Feed</h2>
+                <div class="chart-container" style="background: #000;">
+                    <img id="video-stream" style="object-fit: contain;" alt="Video stream disconnected"/>
+                </div>
+            </section>
+            <section class="card stretch">
+                <h2>Actuator Temperatures</h2>
+                <div class="chart-container"><canvas id="actTempChart"></canvas></div>
+            </section>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js" integrity="sha256-0q+JdOlScWOHcunpUk21uab1jW7C1deBQARHtKMcaB4=" crossorigin="anonymous"></script>
+<script>
+    // --- State ---
+    let pollTimer = null;
+    const maxPoints = 120; // 30-second time horizon
+    const history = { labels: [], temp: [], volt: [] };
+
+    // Chart helpers
+    const niceGrid = { color: 'rgba(148,163,184,0.25)', drawBorder: false };
+    const commonOpts = {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+            legend: { display: false },
+            tooltip: { mode: 'index', intersect: false },
+        },
+        animation: { duration: 0 },
+    };
+
+    // Init charts
+    const tempChart = new Chart(document.getElementById('tempChart'), {
+        type: 'line',
+        data: { labels: history.labels, datasets: [{ data: history.temp, tension: 0.3, pointRadius: 0, borderColor: 'var(--accent)', borderWidth: 2, fill: { target: 'origin', above: 'rgba(96, 165, 250, 0.1)'} }] },
+        options: { ...commonOpts, scales: {
+                x: { grid: niceGrid, ticks: { display: false } },
+                y: { grid: niceGrid, ticks: { color: 'var(--muted)' }, min: 20, max: 80 }
+            }},
+    });
+    const voltChart = new Chart(document.getElementById('voltChart'), {
+        type: 'line',
+        data: { labels: history.labels, datasets: [{ data: history.volt, tension: 0.3, pointRadius: 0, borderColor: 'var(--ok)', borderWidth: 2, fill: { target: 'origin', above: 'rgba(16, 185, 129, 0.1)'} }] },
+        options: { ...commonOpts, scales: {
+                x: { grid: niceGrid, ticks: { display: false } },
+                y: { grid: niceGrid, ticks: { color: 'var(--muted)' }, min: 10, max: 14 }
+            }},
+    });
+    const actTempChart = new Chart(document.getElementById('actTempChart'), {
+        type: 'bar',
+        data: { labels: [], datasets: [{ data: [], backgroundColor: 'rgba(245, 158, 11, 0.6)' }] }, // --warn
+        options: { ...commonOpts, scales: {
+                x: { grid: { drawOnChartArea: false }, ticks: { color: 'var(--muted)' } },
+                y: { grid: niceGrid, ticks: { color: 'var(--muted)' }, min: 20, max: 80 }
+            }},
+    });
+    // NOTE: The actuator effort chart was removed to make space for the video.
+    // If you need it, you can add a new card in the right column.
+
+    // DOM elements
+    const $url = document.getElementById('url');
+    const $interval = document.getElementById('interval');
+    const $start = document.getElementById('start');
+    const $stop = document.getElementById('stop');
+    const $dot = document.getElementById('status-dot');
+    const $status = document.getElementById('status-text');
+    const $bt = document.getElementById('body-temp');
+    const $v = document.getElementById('voltage');
+    const $actTable = document.querySelector('#actTable tbody');
+
+    // Defaults
+    const defaultUrl = /^https?:/.test(location.origin) ? (location.origin + '/state') : 'http://localhost:18080/state';
+    $url.value = defaultUrl;
+
+    function setStatus(kind, text) {
+        $status.textContent = text;
+        $dot.style.background = `var(--${kind})`;
+    }
+
+    function nowLabel() { return new Date().toLocaleTimeString(); }
+
+    function pushHistory(temp, volt) {
+        history.labels.push(nowLabel());
+        history.temp.push(temp);
+        history.volt.push(volt);
+        if (history.labels.length > maxPoints) {
+            history.labels.shift();
+            history.temp.shift();
+            history.volt.shift();
+        }
+        tempChart.update('none');
+        voltChart.update('none');
+    }
+
+    function updateActuators(act) {
+        const n = Math.min(12, Array.isArray(act) ? act.length : 0);
+        const labels = Array.from({ length: n }, (_, i) => `#${i + 1}`);
+        const temps = labels.map((_, i) => act[i]?.temperature ?? 0);
+
+        actTempChart.data.labels = labels;
+        actTempChart.data.datasets[0].data = temps;
+        actTempChart.update('none');
+
+        // table
+        $actTable.innerHTML = '';
+        for (let i = 0; i < n; i++) {
+            const tr = document.createElement('tr');
+            const eff = act[i]?.effort ?? 0;
+            tr.innerHTML = `<td>${i + 1}</td><td>${eff.toFixed(3)}</td><td>${temps[i].toFixed(1)}</td>`;
+            $actTable.appendChild(tr);
+        }
+    }
+
+    async function fetchOnce() {
+        try {
+            const r = await fetch($url.value, { cache: 'no-store' });
+            if (!r.ok) throw new Error(`HTTP ${r.status}`);
+            const j = await r.json();
+            const temp = Number(j.body_temperature ?? NaN);
+            const volt = Number(j.voltage ?? NaN);
+
+            if (!Number.isFinite(temp) || !Number.isFinite(volt)) throw new Error('Bad payload');
+
+            $bt.textContent = temp.toFixed(1);
+            $v.textContent = volt.toFixed(2);
+            pushHistory(temp, volt);
+            updateActuators(j.actuator_states || []);
+
+            setStatus('ok', 'live');
+        } catch (err) {
+            const msg = (err && err.message) ? err.message : 'request failed';
+            if (msg.includes('Failed to fetch')) {
+                setStatus('err', 'network/CORS error');
+            } else {
+                setStatus('err', `error: ${msg}`);
+            }
+            console.error(err);
+        }
+    }
+
+    function start() {
+        stop();
+        setStatus('warn', 'connecting…');
+        const iv = Math.max(50, Number($interval.value) || 250);
+        fetchOnce();
+        pollTimer = setInterval(fetchOnce, iv);
+    }
+
+    function stop() {
+        if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+        setStatus('warn', 'paused');
+    }
+
+    $start.addEventListener('click', start);
+    $stop.addEventListener('click', stop);
+
+    // Start polling for state data on page load
+    window.addEventListener('load', start);
+
+    // Change: Added WebSocket video connection logic
+    window.addEventListener('load', () => {
+        const videoElement = document.getElementById('video-stream');
+        let objectUrl = null;
+
+        function connectVideo() {
+            const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            // Assumes the WebSocket is on the same host, but different port
+            const wsUrl = `${wsProtocol}//${window.location.hostname}:18080/video`;
+
+            const ws = new WebSocket(wsUrl);
+            ws.binaryType = 'blob';
+
+            ws.onopen = () => {
+                console.log('Video WebSocket connected.');
+            };
+
+            ws.onmessage = (event) => {
+                if (objectUrl) {
+                    URL.revokeObjectURL(objectUrl);
+                }
+                objectUrl = URL.createObjectURL(event.data);
+                videoElement.src = objectUrl;
+            };
+
+            ws.onclose = () => {
+                console.log('Video WebSocket disconnected. Reconnecting in 2s...');
+                videoElement.src = '';
+                setTimeout(connectVideo, 2000);
+            };
+
+            ws.onerror = (err) => {
+                console.error('Video WebSocket error:', err);
+                ws.close();
+            };
+        }
+        connectVideo();
+    });
+</script>
+</body>
+</html>
