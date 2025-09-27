@@ -20,6 +20,8 @@
 #include "opencv2/imgcodecs.hpp" // For encoding the image to JPEG
 #include "opencv2/imgproc.hpp" // For drawing text
 
+// #define DEBUG_OUTPUT
+
 static const char kIndexHtml[] = R"(
 <!doctype html>
 <html lang="en">
@@ -47,7 +49,7 @@ public:
     // Subscribe to your RobotState topic
     stateSubscriber_ =
         createSubscriber<raisin::raisin_interfaces::msg::RobotState>(
-            "string_message", connection,
+            "robot_state", connection,
             [this]<typename T0>(T0&& PH1) {
               stateCallback(std::forward<T0>(PH1));
             },
@@ -85,6 +87,7 @@ public:
   [[nodiscard]] raisin::raisin_interfaces::msg::RobotState getState() {
     std::scoped_lock lock(stateMutex_);
 
+#ifdef DEBUG_OUTPUT
     /// only for debugging //////////////////
     raisin::raisin_interfaces::msg::RobotState noisy_state = state_;
 
@@ -102,8 +105,9 @@ public:
     //////////////////////////////////////////
 
     return noisy_state;
-
-    // return state_;
+#else
+    return state_;
+#endif
   }
 
   void compressedImageCallback(
@@ -223,7 +227,7 @@ int main(int /*argc*/, char** /*argv*/) {
   // --- RAISIN network setup
   raisin::raisinInit();
 
-  std::vector<std::vector<std::string>> thread_spec = {{std::string("sub")}};
+  std::vector<std::vector<std::string>> thread_spec = {{"sub"}};
   auto network = std::make_shared<raisin::Network>("http_server", "http_server",
                                                    thread_spec);
 
@@ -278,10 +282,12 @@ int main(int /*argc*/, char** /*argv*/) {
           CROW_LOG_INFO << "Video client disconnected: " << &conn << " Reason: " << reason << " Code: " << code;
       });
 
+#ifdef DEBUG_OUTPUT
   // Launch the video stream debugger in a separate thread
   std::thread video_debugger_thread(runVideoStreamDebugger, std::ref(video_users),
                                     std::ref(users_mutex));
   video_debugger_thread.detach(); // Allow the thread to run in the background
+#endif
 
   // Configure port via env PORT or default to 18080
   unsigned short port = 18080;
