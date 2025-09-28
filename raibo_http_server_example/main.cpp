@@ -57,7 +57,7 @@ public:
 
     videoSubscriber_ =
         createSubscriber<raisin::raisin_interfaces::msg::FfmpegPacket>(
-            "video", connection,
+            "d455_front/rgb", connection,
             [this](auto&& PH1) {
               compressedImageCallback(std::forward<decltype(PH1)>(PH1));
             },
